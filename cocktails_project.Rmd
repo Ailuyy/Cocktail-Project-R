@@ -1,0 +1,152 @@
+---
+title: "**Analiza zbioru - Koktajle**"
+author: "*Julia L.*"
+date: "*`r Sys.Date()`*"
+output: slidy_presentation 
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+```{r, include=FALSE}
+library(dplyr)
+library(stringr)
+library(tidyr)
+```
+
+```{r}
+urlfile <- "https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2020/2020-05-26/boston_cocktails.csv"
+data <- read.csv(urlfile)
+data$ingredient <- str_to_title(data$ingredient)
+data$ingredient <- str_replace_all(data$ingredient, c("Juice Of A (.*)" = "\\1 Juice", 
+                                                      "Juice Of (.*)" = "\\1 Juice", 
+                                                      "Fresh (.*) Juice" = "\\1 Juice",
+                                                      "(.*) \\(If Desired\\)" = "\\1",
+                                                      "(.*) \\(Optional\\)" = "\\1",
+                                                      "(.*), \\d+(/\\d+)? Oz" = "\\1",
+                                                      "(.*) And \\d+(/\\d+)? Oz" = "\\1",
+                                                      "(.*) \\d+(/\\d+)? Oz" = "\\1",
+                                                      "Fresh (.*), Cut In Half" = "\\1, Cut Into Halves",
+                                                      "Fresh (.*), Cut In Halves" = "\\1, Cut Into Halves",
+                                                      "(.*) Wedges" = "\\1 Wedge",
+                                                      "Fresh (.*) Leaves" = "\\1 Leaves"))
+```
+
+## Koktajle
+
+W analizowanym zbiorze jest `r length(unique(data$row_id))` unikalnych koktajli, pogrupowanych według `r length(unique(data$category))` kategorii (`r unique(data$category)`).
+
+Poniżej znajduje się liczba koktajli w poszczególnych kategoriach.
+
+```{r}
+cocktails <- data %>% 
+  group_by(category) %>% 
+  summarise("Liczba koktajli" = n_distinct(name)) %>% 
+  rename("Kategoria" = category) %>% 
+  as.data.frame()
+cocktails
+```
+
+## Koktajle z poszczególną liczbą składników
+
+Wszystkie koktajle mają określoną liczbę składników (od `r min(data$ingredient_number)` do `r max(data$ingredient_number)`). Poniżej znajduje się zestawienie, przedstawiające ilość koktajli z poszczególną liczbą składników.
+
+```{r}
+ingr_count <- data %>% 
+  group_by(name) %>% 
+  summarise(ingredient_number = max(ingredient_number))
+
+cocktail_count <- ingr_count %>% 
+  count(ingredient_number)
+
+table <- data.frame(ingr_count = 1:max(ingr_count$ingredient_number), 
+                cocktail_count = cocktail_count$n)
+
+names(table) <- c("Liczba składników", "Liczba koktajli")
+
+table
+```
+
+## Składniki
+
+W całym zbiorze występuje `r length(unique(data$ingredient))` unikatowych składników.
+
+Poniżej znajdują się najczęściej wykorzystywane składniki w koktajlach.
+
+```{r}
+best_ingr <- data %>%
+  count(ingredient, sort = TRUE) %>% 
+  slice(1:20) %>% 
+  rename("Składnik" = ingredient, "Liczba użyć" = n)
+best_ingr
+```
+
+## Koktajle jednoskładnikowe
+
+W zbiorze pojawiły się także koktajle jednoskładnikowe. Oto zestawienie przedstawiające owe koktajle wraz z ich składnikami.
+
+```{r}
+single_ingr <- data %>% 
+  group_by(name) %>% 
+  filter(max(ingredient_number) == 1) %>% 
+  summarise(unique(ingredient)) %>% 
+  as.data.frame()
+
+names(single_ingr) <- c("Nazwa koktajlu", "Składnik")
+single_ingr
+```
+
+## Koktajle nazwane po swoich składnikach
+
+Zestawienie przedstawiające wyjątkowe koktajle, których składniki pokrywają się z nazwą koktajlu.
+
+```{r}
+related_cock <- data %>% 
+  mutate(cont = ifelse(str_detect(name, fixed(ingredient)), 1, 0)) %>% 
+  filter(cont == 1) %>% 
+  select(name, ingredient) %>% 
+  group_by(name) %>% 
+  summarise(ingredients = toString(unique(ingredient))) %>% 
+  filter(str_detect(ingredients, ",")) %>% 
+  as.data.frame()
+
+names(related_cock) <- c("Nazwa koktajlu", "Składniki")
+related_cock
+```
+
+## Soki w koktajlach
+
+Najczęściej używane soki (kombinacje soków) w koktajlach.
+
+```{r}
+juices <- data %>% 
+  filter(str_detect(ingredient, fixed("Juice"))) %>% 
+  group_by(ingredient) %>% 
+  summarise(count = n()) %>% 
+  arrange(desc(count)) %>% 
+  as.data.frame() %>% 
+  slice(1:10)
+
+names(juices) <- c("Rodzaj soku", "Ilość koktajli")
+juices
+```
+
+## Najpopularniejsze składniki w kategoriach
+
+Zestawienie przedstawiające najpopularniejszy składnik (składniki) w kategoriach.
+
+```{r}
+best_ingr_cat <- data %>% 
+  group_by(category) %>% 
+  count(ingredient, sort = TRUE) %>% 
+  mutate(rank = min_rank(desc(n))) %>% 
+  filter(rank == 1) %>% 
+  summarise(ingredients = toString(ingredient)) %>% 
+  as.data.frame()
+
+names(best_ingr_cat) <- c("Kategoria", "Składniki")
+best_ingr_cat
+```
+
+
